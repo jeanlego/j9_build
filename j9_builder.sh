@@ -1,5 +1,11 @@
 #!/bin/bash
 
+trap ctrl_c INT
+
+ctrl_c() {
+        pkill "$0"
+}
+
 ARGS_IN=( "$@" )
 
 ## Returns errlvl 0 if $1 is a reachable git remote url 
@@ -12,9 +18,37 @@ reachable_host() {
 [ "_${ARCH}" != "_" ]           || ARCH="$(uname -m)"
 [ "_${VERSION}" != "_" ]        || VERSION="8"
 [ "_${BUILD_TYPE}" != "_" ]     || BUILD_TYPE="release"
+
+declare -A OPENJ9
+declare -A OMR
+declare -A GET_SOURCE
+
+declare -A BRANCH
+declare -A REMOTE
+
+j9_conf=''
+
+source "./build.conf"
+if ${J9_BUILD_READY};
+then
+        echo "sourced build.conf"
+else
+        echo "failed to source build.conf"
+fi
+
+# check valid env
+case "${BUILD_TYPE}" in                
+release|debug) ;;*)     die -1 "BUILD_TYPE=\"${BUILD_TYPE}\"  env variable can only be \"release\" or \"debug\"";;
+esac
+
+case "${VERSION}" in
+8|9|10|11|12);;*)       die -1 "VERSION=\"${VERSION}\" env variable can only be \"8, 9, 10, 11 or 12\"";;
+esac
+
 J9_JDK_BASE="jdk${VERSION}"
 
-BASE_DIR="${PWD}"/j9Builds
+THIS_DIR="${PWD}"
+BASE_DIR="${THIS_DIR}"/j9Builds
 DOWNLOADS="${BASE_DIR}"/downloads
 LOGS="${BASE_DIR}"/logs
 UTILS="${BASE_DIR}"/utils
@@ -35,51 +69,24 @@ mkdir -p "${J9_JDK_DIR}"
 mkdir -p "${J9_JDK_DIR}/omr"
 mkdir -p "${J9_JDK_DIR}/openj9"
 
-git_origin="https://github.com/CAS-Atlantic"
-get_source_origin="https://github.com/ibmruntimes"
-
-# check valid env
-case "${BUILD_TYPE}" in                
-release|debug) ;;*)     die -1 "BUILD_TYPE=\"${BUILD_TYPE}\"  env variable can only be \"release\" or \"debug\"";;
-esac
-
-case "${VERSION}" in
-8|9|10|11|12);;*)       die -1 "VERSION=\"${VERSION}\" env variable can only be \"8, 9, 10, 11 or 12\"";;
-esac
-
-declare -A URL
 declare -A OUTPUT
-declare -A BRANCH
-declare -A REMOTE
-
-URL[get_source]="${get_source_origin}/openj9-openjdk-jdk${VERSION}.git"
-BRANCH[get_source]="openj9"
-REMOTE[get_source]="origin"
 OUTPUT[get_source]="${J9_JDK_DIR}"
-
-URL[openj9]="${git_origin}/openj9.git"
-BRANCH[openj9]="master"
-REMOTE[openj9]="origin"
 OUTPUT[openj9]="${J9_JDK_DIR}/openj9"
-
-URL[omr]="${git_origin}/omr.git"
-BRANCH[omr]="master"
-REMOTE[omr]="origin"
 OUTPUT[omr]="${J9_JDK_DIR}/omr"
 
-URL[freemarker]="https://sourceforge.net/projects/freemarker/files/freemarker/2.3.8/freemarker-2.3.8.tar.gz/download"
+REMOTE[freemarker]="https://sourceforge.net/projects/freemarker/files/freemarker/2.3.8/freemarker-2.3.8.tar.gz/download"
 OUTPUT[freemarker]="${DOWNLOADS}/freemarker.tgz"
 
-URL[bootjdk]="https://api.adoptopenjdk.net/v2/binary/nightly/openjdk${VERSION}?openjdk_impl=hotspot&os=linux&arch=${ARCH}&release=latest&type=jdk"
+REMOTE[bootjdk]="https://api.adoptopenjdk.net/v2/binary/nightly/openjdk${VERSION}?openjdk_impl=hotspot&os=linux&arch=${ARCH}&release=latest&type=jdk"
 OUTPUT[bootjdk]="${DOWNLOADS}/bootjdk${VERSION}_${ARCH}.tar.gz"
 
-URL[dockerfile]="https://raw.githubusercontent.com/CAS-Atlantic/openj9/52fa8dc53987972998512f45b91fe4cca268b652/buildenv/docker/jdk11/x86_64/ubuntu18/Dockerfile"
+REMOTE[dockerfile]="https://raw.githubusercontent.com/CAS-Atlantic/openj9/52fa8dc53987972998512f45b91fe4cca268b652/buildenv/docker/jdk11/x86_64/ubuntu18/Dockerfile"
 OUTPUT[dockerfile]="${BUILDER}/Dockerfile"
 
-URL[watchdog]="https://raw.githubusercontent.com/CAS-Atlantic/openj9/aarch64_casa_watchdog_script/casa.watchdog.sh"
+REMOTE[watchdog]="https://raw.githubusercontent.com/CAS-Atlantic/openj9/aarch64_casa_watchdog_script/casa.watchdog.sh"
 OUTPUT[watchdog]="${UTILS}/casa.watchdog.sh"
 
-URL[xdocker]="https://raw.githubusercontent.com/CAS-Atlantic/xdocker/master/xdocker.sh"
+REMOTE[xdocker]="https://raw.githubusercontent.com/CAS-Atlantic/xdocker/master/xdocker.sh"
 OUTPUT[xdocker]="${UTILS}/xdocker.sh"
 
 print_script_env() {
@@ -128,7 +135,7 @@ create_sh() {
 
         echo "Making ${script_name}"
         echo "\
-#!/bin/sh
+#!/bin/bash
 rm -f ${name}* || /bin/true
 
 if
@@ -152,8 +159,17 @@ fi
 generic_git_cmd='
         if [ ! -f "${DIR}/.git" ]; then
                 git -C "${DIR}" init
-                git -C "${DIR}" remote add "${REMOTE}" "${REMOTE_URL}"
         fi
+        
+        # clean the remotes
+        git -C "${DIR}" remote | xargs -n 1 -I{} git -C "${DIR}" remote remove {}
+
+        # update the remotes
+
+        for ((i=0; i<${#REMOTE_URLS[@]}; i++)); do
+                git -C "${DIR}" remote add "${REMOTE_NAMES[$i]}" "${REMOTE_URLS[$i]}"
+        done
+
         git -C "${DIR}" fetch --progress "${REMOTE}" "${BRANCH}"
         if [ "_$(git -C "${DIR}" rev-parse --abbrev-ref HEAD)" != "_${BRANCH}" ]; then
                 git -C "${DIR}" checkout --progress -b "${BRANCH}" "${REMOTE}/${BRANCH}"
@@ -168,19 +184,22 @@ generic_curl_cmd='
 
 get_source_jdk() {
         create_sh "
+        REMOTE_NAMES=( ${!GET_SOURCE[@]} )
+        REMOTE_URLS=( ${GET_SOURCE[@]} )
         DIR=\"${OUTPUT[get_source]}\"
         BRANCH=\"${BRANCH[get_source]}\"
-        REMOTE_URL=\"${URL[get_source]}\"
         REMOTE=\"${REMOTE[get_source]}\"
         ${generic_git_cmd}
+        chmod +x ${OUTPUT[get_source]}/configure;
 "
 }
 
 get_omr() {
         create_sh "
+        REMOTE_NAMES=( ${!OMR[@]} )
+        REMOTE_URLS=( ${OMR[@]} )
         DIR=\"${OUTPUT[omr]}\"
         BRANCH=\"${BRANCH[omr]}\"
-        REMOTE_URL=\"${URL[omr]}\"
         REMOTE=\"${REMOTE[omr]}\"
         ${generic_git_cmd}
 "
@@ -189,9 +208,10 @@ get_omr() {
 get_openj9() {
         
         create_sh "
+        REMOTE_NAMES=( ${!OPENJ9[@]} )
+        REMOTE_URLS=( ${OPENJ9[@]} )
         DIR=\"${OUTPUT[openj9]}\"
         BRANCH=\"${BRANCH[openj9]}\"
-        REMOTE_URL=\"${URL[openj9]}\"
         REMOTE=\"${REMOTE[openj9]}\"
         ${generic_git_cmd}
 "
@@ -200,7 +220,7 @@ get_openj9() {
 get_freemarker() {
 
         create_sh  "
-        URL=\"${URL[freemarker]}\"
+        URL=\"${REMOTE[freemarker]}\"
         OUTPUT=\"${OUTPUT[freemarker]}\"
         ${generic_curl_cmd}
         if [ ! -f ${UTILS}/freemarker.jar ]; then
@@ -211,7 +231,7 @@ get_freemarker() {
 
 get_bootjdk() {
         create_sh "
-        URL=\"${URL[bootjdk]}\"
+        URL=\"${REMOTE[bootjdk]}\"
         OUTPUT=\"${OUTPUT[bootjdk]}\"
         ${generic_curl_cmd}
         if [ ! -d ${UTILS}/bootjdk${VERSION}_${ARCH} ]; then
@@ -225,30 +245,62 @@ get_bootjdk() {
 
 get_watchdog() {
         create_sh "
-        URL=\"${URL[watchdog]}\"
+        URL=\"${REMOTE[watchdog]}\"
         OUTPUT=\"${OUTPUT[watchdog]}\"
         ${generic_curl_cmd}
+        chmod +x ${OUTPUT[watchdog]};
         "
 }
 
 get_xdocker() {
         create_sh "
-        URL=\"${URL[xdocker]}\"
+        URL=\"${REMOTE[xdocker]}\"
         OUTPUT=\"${OUTPUT[xdocker]}\"
         ${generic_curl_cmd}
+        chmod +x ${OUTPUT[xdocker]};
         "
 }
 
 get_dockerfile() {
         create_sh "
-        URL=\"${URL[dockerfile]}\"
+        URL=\"${REMOTE[dockerfile]}\"
         OUTPUT=\"${OUTPUT[dockerfile]}\"
         ${generic_curl_cmd}
         "
 }
 
 run_all() {
+        (
+                sleep 1 
+                while true;
+                do
+
+                        FILES_TO_LOG=( "${LOGS}/*.progress" )
+                        if [ "_1" == "_${#FILES_TO_LOG[@]}" ]
+                        then
+                                if [ -f "${FILES_TO_LOG[0]}" ]
+                                then
+                                        echo -e "\n\n========== LOG ${FILES_TO_LOG[0]} ============ \n\n"
+                                        tail -f "${FILES_TO_LOG[0]}"
+                                fi
+                        else
+                                for files in "${FILES_TO_LOG[@]}";
+                                do
+                                        if [ -f "${files}" ]
+                                        then
+                                                echo -e "\n\n========== LOG ${files} ============ \n\n"
+                                                timeout 10 tail -f "${files}"
+                                        fi
+                                done
+                        fi
+                done 
+        )&
+
+        logger="$!"
+
         ( for file in "${SCRIPTS}"/get_*.sh; do echo "${file}"; done ) | xargs -n1 -P4 -I{} /bin/bash -c '{}'
+        kill "${logger}"
+
 }
 
 source_env() {
@@ -292,31 +344,6 @@ patch_debug() {
         sed -i "/--strip-debug/d" "${J9_JDK_DIR}/omr/omrmakefiles/rules.linux.mk"
 }
 
-clean_cmd() {
-        exec_or_die "\
-                source ${SOURCE_FLAGS}; \
-                make clean; \
-                " 
-}
-configure_cmd() {
-        exec_or_die "\
-                source ${SOURCE_FLAGS}; \
-                chmod +x ./configure; \
-                bash configure --with-freemarker-jar=${FREEMARKER_PATH} --with-boot-jdk=${JAVA_HOME} ${j9_conf} \$* ;\
-                popd; \
-                " 
-}
-
-build_cmd() {
-        exec_or_die "\
-                source ${SOURCE_FLAGS}; \
-                pushd ${J9_JDK_DIR}; \
-                chmod +x ${UTILS}/casa.watchdog.sh ;\
-                ${UTILS}/casa.watchdog.sh make $* ;\
-                popd ;\
-                "
-}
-
 ######################
 # Initial 
 
@@ -344,45 +371,46 @@ source_env
 
 source "${SOURCE_FLAGS}"
 
-# generate base scripts
-get_freemarker
-get_bootjdk
-get_dockerfile
-get_watchdog
-get_xdocker
-get_source_jdk
-get_omr
-get_openj9
+if [ "_${XDOCKER}" == "_" ]; then
+        # generate base scripts
+        echo " --- Generating runnables"
+        get_freemarker
+        get_bootjdk
+        get_dockerfile
+        get_watchdog
+        get_xdocker
+        get_source_jdk
+        get_omr
+        get_openj9
 
-#generate a multithreaded cmd
-run_all
+        #generate a multithreaded cmd
+        echo " --- Doing setup"
+        run_all
 
-
-
-patch_debug
-
-if [ "${EXIT_CODE}" == "0" ]; then
-
-        if [ "_${XDOCKER}" == "_" ]; then
-
-                echo "Starting docker chroot environment"
-                echo "####"
-                chmod +x "${UTILS}/xdocker.sh"
-                "${UTILS}/xdocker.sh" -f "${BUILDER}/Dockerfile ${ARCH}" ./
-        else
-                case $1 in
-                        configure)        
-                                configure_cmd "${@:2}"
-                        ;;
-                        build)          
-                                build_cmd "${@:2}"
-                        ;;
-                        *)              
-                                die -1 "Invalid command $*"
-                        ;;
-                esac
+        echo " --- Patching debug symbols"
+        patch_debug
+        if [ "_0" == "_$( find "${LOGS}" -name "*.failure" | wc -l )" ]
+        then
+                echo " --- Starting docker chroot environment"
+                "${UTILS}"/xdocker.sh -f "${BUILDER}"/Dockerfile "${ARCH}" "${THIS_DIR}" "$0" "$@"
         fi
-        EXIT_CODE=$?
+else
+        pushd "${J9_JDK_DIR}" || exit 255
+        case $1 in
+                configure)        
+                        ./configure --with-freemarker-jar="${UTILS}/freemarker.jar" --with-boot-jdk="${UTILS}/bootjdk${VERSION}_${ARCH}" ${j9_conf} "${@:2}"
+                ;;
+                build)          
+                        "${UTILS}/casa.watchdog.sh" make "${@:2}"
+                ;;
+                clean)
+                        make clean
+                ;;
+                *)              
+                        die -1 "Invalid command $*"
+                ;;
+        esac
+        popd || exit 255
 fi
 
-exit ${EXIT_CODE}
+exit $?
