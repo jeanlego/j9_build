@@ -251,7 +251,8 @@ get_freemarker() {
         OUTPUT=\"${OUTPUT[freemarker]}\"
         ${generic_curl_cmd}
         if [ ! -f ${UTILS}/freemarker.jar ]; then
-                tar -C ${UTILS} -xzf ${DOWNLOADS}/freemarker.tgz freemarker-2.3.8/lib/freemarker.jar --strip=2
+                tar -C ${UTILS} -xzf ${OUTPUT[freemarker]} freemarker-2.3.8/lib/freemarker.jar --strip=2 \\
+                        || rm ${OUTPUT[freemarker]} # download again if it can't extract
         fi
         "
 }
@@ -263,7 +264,8 @@ get_bootjdk() {
         ${generic_curl_cmd}
         if [ ! -d ${UTILS}/bootjdk${VERSION}_${ARCH} ]; then
                 mkdir ${DOWNLOADS}/scratch
-                tar -xzf ${DOWNLOADS}/bootjdk${VERSION}_${ARCH}.tar.gz -C ${DOWNLOADS}/scratch
+                tar -xzf ${OUTPUT[bootjdk]} -C ${DOWNLOADS}/scratch \\
+                        || rm ${OUTPUT[bootjdk]} # download again if it can't extract
                 mv ${DOWNLOADS}/scratch/* ${UTILS}/bootjdk${VERSION}_${ARCH}
                 rm -Rf ${DOWNLOADS}/scratch
         fi
