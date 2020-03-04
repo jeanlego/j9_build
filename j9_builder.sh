@@ -14,7 +14,6 @@ reachable_host() {
 }
 
 # set defaults 
-
 [ "_${ARCH}" != "_" ]           || ARCH="$(uname -m)"
 [ "_${VERSION}" != "_" ]        || VERSION="8"
 [ "_${BUILD_TYPE}" != "_" ]     || BUILD_TYPE="release"
@@ -22,6 +21,7 @@ reachable_host() {
 declare -A OPENJ9
 declare -A OMR
 declare -A GET_SOURCE
+declare -A OUTPUT
 
 declare -A BRANCH
 declare -A REMOTE
@@ -45,8 +45,6 @@ case "${VERSION}" in
 8|9|10|11|12);;*)       die -1 "VERSION=\"${VERSION}\" env variable can only be \"8, 9, 10, 11 or 12\"";;
 esac
 
-J9_JDK_BASE="jdk${VERSION}"
-
 THIS_DIR="${PWD}"
 BASE_DIR="${THIS_DIR}"/j9Builds
 DOWNLOADS="${BASE_DIR}"/downloads
@@ -55,8 +53,10 @@ UTILS="${BASE_DIR}"/utils
 BUILDER="${UTILS}"/builder
 SCRIPTS="${UTILS}"/scripts
 
-J9_JDK_DIR="${BASE_DIR}/${J9_JDK_BASE}"
-SOURCE_FLAGS="${BASE_DIR}"/j9.env
+OUTPUT[get_source]="${BASE_DIR}/jdk${VERSION}"
+OUTPUT[openj9]="${BASE_DIR}/openj9"
+OUTPUT[omr]="${BASE_DIR}/omr"
+SOURCE_FLAGS=j9.env
 
 mkdir -p "${BASE_DIR}"
 mkdir -p "${DOWNLOADS}"
@@ -65,14 +65,11 @@ rm -Rf "${SCRIPTS}" && mkdir -p "${SCRIPTS}"
 rm -Rf "${BUILDER}" && mkdir -p "${BUILDER}"     
 rm -Rf "${LOGS}" && mkdir -p "${LOGS}"     
 
-mkdir -p "${J9_JDK_DIR}"
-mkdir -p "${J9_JDK_DIR}/omr"
-mkdir -p "${J9_JDK_DIR}/openj9"
-
-declare -A OUTPUT
-OUTPUT[get_source]="${J9_JDK_DIR}"
-OUTPUT[openj9]="${J9_JDK_DIR}/openj9"
-OUTPUT[omr]="${J9_JDK_DIR}/omr"
+mkdir -p "${OUTPUT[get_source]}"
+mkdir -p "${OUTPUT[openj9]}"
+mkdir -p "${OUTPUT[omr]}"
+[ ! -L "${OUTPUT[get_source]}/omr" ] && ln -s -t "${OUTPUT[get_source]}" "${OUTPUT[omr]}"
+[ ! -L "${OUTPUT[get_source]}/openj9" ] && ln -s -t "${OUTPUT[get_source]}" "${OUTPUT[openj9]}"
 
 REMOTE[freemarker]="https://sourceforge.net/projects/freemarker/files/freemarker/2.3.8/freemarker-2.3.8.tar.gz/download"
 OUTPUT[freemarker]="${DOWNLOADS}/freemarker.tgz"
@@ -143,6 +140,36 @@ if
         set -xe
         $* 
 ) > ${script_log} 2>&1
+then 
+        echo finished ${FUNCNAME[1]}
+        mv ${script_log} ${script_pass}
+        exit 0
+else
+        mv ${script_log} ${script_fail}
+        echo failed ${FUNCNAME[1]}
+        exit 1
+fi
+" > "${script_name}"
+        chmod +x "${script_name}"
+}
+
+create_docker_sh() {
+        name="${LOGS}/${FUNCNAME[1]}"
+        script_name="${OUTPUT[get_source]}/${FUNCNAME[1]}.sh"
+        script_log="${name}.progress"
+        script_fail="${name}.failure"
+        script_pass="${name}.success"
+
+        echo "Making ${script_name}"
+        echo "\
+#!/bin/bash
+rm -f ${name}* || /bin/true
+
+if
+(
+        set -xe
+        $* 
+) | tee ${script_log} 2>&1
 then 
         echo finished ${FUNCNAME[1]}
         mv ${script_log} ${script_pass}
@@ -269,6 +296,31 @@ get_dockerfile() {
         "
 }
 
+do_j9() {
+        echo "\
+#!/bin/bash
+pushd ${OUTPUT[get_source]} || exit 255
+source \"${SOURCE_FLAGS}\"
+(
+        case \$1 in
+                configure)
+                        bash configure --with-freemarker-jar=${UTILS}/freemarker.jar --with-boot-jdk=${UTILS}/bootjdk${VERSION}_${ARCH} \${j9_conf} \"\${@:2}\"
+                        ;;
+                build)
+                        ${UTILS}/casa.watchdog.sh make \"\${@:2}\"
+                        ;;
+                clean)
+                        make clean
+                        ;;
+                *)
+                        echo 'not a valid command'
+        esac
+) 2>&1 | tee \"_\$1.log\"
+popd || exit 255
+" > "${OUTPUT[get_source]}/${FUNCNAME[0]}.sh"
+        chmod +x "${OUTPUT[get_source]}/${FUNCNAME[0]}.sh"
+}
+
 run_all() {
         (
                 sleep 1 
@@ -327,7 +379,7 @@ export CFLAGS='-O0 -g3'
 export j9_conf='--with-debug-level=slowdebug'
 export BUILD_CONFIG=slowdebug
 export CONF=slowdebug
-" > "${SOURCE_FLAGS}"
+" > "${OUTPUT[get_source]}/${SOURCE_FLAGS}"
 
         if [ "${BUILD_TYPE}" != "debug" ]
         then 
@@ -335,18 +387,23 @@ export CONF=slowdebug
 unset j9_conf
 unset BUILD_CONFIG
 unset CONF
-" >> "${SOURCE_FLAGS}"
+" >> "${OUTPUT[get_source]}/${SOURCE_FLAGS}"
         fi
 }
 
 patch_debug() {
-        sed -i "/--strip-debug/d" "${J9_JDK_DIR}/openj9/runtime/makelib/targets.mk.linux.inc.ftl"
-        sed -i "/--strip-debug/d" "${J9_JDK_DIR}/omr/omrmakefiles/rules.linux.mk"
+        openj9_mk=${UTILS}/j9.mk
+        omr_mk=${UTILS}/omr.mk
+
+        [ ! -f "${omr_mk}" ] && cp "${OUTPUT[omr]}/omrmakefiles/rules.linux.mk" "${omr_mk}"
+        [ ! -f "${openj9_mk}" ] && cp "${OUTPUT[openj9]}/runtime/makelib/targets.mk.linux.inc.ftl" "${openj9_mk}"
+
+        sed "/--strip-debug/d" "${openj9_mk}" > "${OUTPUT[openj9]}/runtime/makelib/targets.mk.linux.inc.ftl"
+        sed "/--strip-debug/d" "${omr_mk}" > "${OUTPUT[omr]}/omrmakefiles/rules.linux.mk"
 }
 
 ######################
 # Initial 
-
 case "$(uname -s)" in
         Linux)
                 # nothing to do
@@ -361,56 +418,40 @@ case $1 in
         *)              die -1 "Invalid command $1";;
 esac
 
+
 echo "Running With the following variables"
 print_script_env
 echo "========="
 
-
 # set env
 source_env
 
-source "${SOURCE_FLAGS}"
+# generate base scripts
+echo " --- Generating runnables"
+get_freemarker
+get_bootjdk
+get_dockerfile
+get_watchdog
+get_xdocker
+get_source_jdk
+get_omr
+get_openj9
 
-if [ "_${XDOCKER}" == "_" ]; then
-        # generate base scripts
-        echo " --- Generating runnables"
-        get_freemarker
-        get_bootjdk
-        get_dockerfile
-        get_watchdog
-        get_xdocker
-        get_source_jdk
-        get_omr
-        get_openj9
+#generate a multithreaded cmd
+echo " --- Doing setup"
+run_all
 
-        #generate a multithreaded cmd
-        echo " --- Doing setup"
-        run_all
+echo " --- Patching debug symbols"
+patch_debug
 
-        echo " --- Patching debug symbols"
-        patch_debug
-        if [ "_0" == "_$( find "${LOGS}" -name "*.failure" | wc -l )" ]
-        then
-                echo " --- Starting docker chroot environment"
-                "${UTILS}"/xdocker.sh -f "${BUILDER}"/Dockerfile "${ARCH}" "${THIS_DIR}" "$0" "$@"
-        fi
-else
-        pushd "${J9_JDK_DIR}" || exit 255
-        case $1 in
-                configure)        
-                        ./configure --with-freemarker-jar="${UTILS}/freemarker.jar" --with-boot-jdk="${UTILS}/bootjdk${VERSION}_${ARCH}" ${j9_conf} "${@:2}"
-                ;;
-                build)          
-                        "${UTILS}/casa.watchdog.sh" make "${@:2}"
-                ;;
-                clean)
-                        make clean
-                ;;
-                *)              
-                        die -1 "Invalid command $*"
-                ;;
-        esac
-        popd || exit 255
+# generate the build scripts
+do_j9
+
+if [ "_0" == "_$( find "${LOGS}" -name "*.failure" | wc -l )" ]
+then
+        echo " --- Starting docker chroot environment"
+        echo " do_configure.sh and do_build.sh will allow you to build"
+        "${UTILS}"/xdocker.sh -f "${BUILDER}"/Dockerfile "${ARCH}" "${THIS_DIR}" "${OUTPUT[get_source]}/do_j9.sh" "$@"
 fi
 
 exit $?
