@@ -155,7 +155,7 @@ generic_git_cmd='
                 git -C "${DIR}" remote add "${REMOTE}" "${REMOTE_URL}"
         fi
         git -C "${DIR}" fetch --progress "${REMOTE}" "${BRANCH}"
-        if [ "_$(git rev-parse --abbrev-ref HEAD)" != "_${BRANCH}" ]; then
+        if [ "_$(git -C "${DIR}" rev-parse --abbrev-ref HEAD)" != "_${BRANCH}" ]; then
                 git -C "${DIR}" checkout --progress -b "${BRANCH}" "${REMOTE}/${BRANCH}"
         fi
 '
