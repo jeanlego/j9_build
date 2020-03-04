@@ -23,7 +23,6 @@ SCRIPTS="${UTILS}"/scripts
 
 J9_JDK_DIR="${BASE_DIR}/${J9_JDK_BASE}"
 SOURCE_FLAGS="${BASE_DIR}"/j9.env
-TMP_DIR=$(mktemp -d)
 
 mkdir -p "${BASE_DIR}"
 mkdir -p "${DOWNLOADS}"
@@ -39,13 +38,6 @@ mkdir -p "${J9_JDK_DIR}/openj9"
 git_origin="https://github.com/CAS-Atlantic"
 get_source_origin="https://github.com/ibmruntimes"
 
-if reachable_host "gitlab.casa.cs.unb.ca"; then
-        git_origin="http://gitlab.casa.cs.unb.ca/omr"
-        case "${VERSION}" in
-                11)     get_source_origin="http://gitlab.casa.cs.unb.ca/omr";;
-        esac
-fi
-
 # check valid env
 case "${BUILD_TYPE}" in                
 release|debug) ;;*)     die -1 "BUILD_TYPE=\"${BUILD_TYPE}\"  env variable can only be \"release\" or \"debug\"";;
@@ -57,6 +49,23 @@ esac
 
 declare -A URL
 declare -A OUTPUT
+declare -A BRANCH
+declare -A REMOTE
+
+URL[get_source]="${get_source_origin}/openj9-openjdk-jdk${VERSION}.git"
+BRANCH[get_source]="openj9"
+REMOTE[get_source]="origin"
+OUTPUT[get_source]="${J9_JDK_DIR}"
+
+URL[openj9]="${git_origin}/openj9.git"
+BRANCH[openj9]="master"
+REMOTE[openj9]="origin"
+OUTPUT[openj9]="${J9_JDK_DIR}/openj9"
+
+URL[omr]="${git_origin}/omr.git"
+BRANCH[omr]="master"
+REMOTE[omr]="origin"
+OUTPUT[omr]="${J9_JDK_DIR}/omr"
 
 URL[freemarker]="https://sourceforge.net/projects/freemarker/files/freemarker/2.3.8/freemarker-2.3.8.tar.gz/download"
 OUTPUT[freemarker]="${DOWNLOADS}/freemarker.tgz"
@@ -111,109 +120,135 @@ print_script_env
 }
 
 create_sh() {
+        name="${LOGS}/${FUNCNAME[1]}"
         script_name="${SCRIPTS}/${FUNCNAME[1]}.sh"
-        script_log_filename="${LOGS}/${FUNCNAME[1]}"
-        script_log="${script_log_filename}.progress"
-        script_fail="${script_log_filename}.failure"
-        script_pass="${script_log_filename}.success"
+        script_log="${name}.progress"
+        script_fail="${name}.failure"
+        script_pass="${name}.success"
 
         echo "Making ${script_name}"
-        echo "
-        
-        rm -f ${script_log_filename}* || /bin/true
-        (
-                set -xe
-                $* 
-        ) &> ${script_log} && touch ${script_pass} && exit 0;
-        touch ${script_fail} && exit 1;" > "${script_name}"
+        echo "\
+#!/bin/sh
+rm -f ${name}* || /bin/true
+
+if
+(
+        set -xe
+        $* 
+) > ${script_log} 2>&1
+then 
+        echo finished ${FUNCNAME[1]}
+        mv ${script_log} ${script_pass}
+        exit 0
+else
+        mv ${script_log} ${script_fail}
+        echo failed ${FUNCNAME[1]}
+        exit 1
+fi
+" > "${script_name}"
         chmod +x "${script_name}"
 }
 
-run_sh() {
-        echo "${SCRIPTS}/*" | xargs -P4 -I{} /bin/bash -c '{}'
-}
+generic_git_cmd='
+        if [ ! -f "${DIR}/.git" ]; then
+                git -C "${DIR}" init
+                git -C "${DIR}" remote add "${REMOTE}" "${REMOTE_URL}"
+        fi
+        git -C "${DIR}" fetch --progress "${REMOTE}" "${BRANCH}"
+        if [ "_$(git rev-parse --abbrev-ref HEAD)" != "_${BRANCH}" ]; then
+                git -C "${DIR}" checkout --progress -b "${BRANCH}" "${REMOTE}/${BRANCH}"
+        fi
+'
+
+generic_curl_cmd='
+        if [ ! -f "${OUTPUT}" ]; then
+                curl -L --output "${OUTPUT}" "${URL}"
+        fi
+'
 
 get_source_jdk() {
         create_sh "
-                if [ ! -f ${J9_JDK_DIR}/.git ]; then
-                        git -C ${J9_JDK_DIR} init
-                        git -C ${J9_JDK_DIR} remote add origin ${get_source_origin}/openj9-openjdk-jdk${VERSION}.git
-                fi
-                git -C ${J9_JDK_DIR}/omr fetch --progress origin openj9 &&
-                git -C ${J9_JDK_DIR}/omr checkout --progress -b master origin/openj9
-                "
+        DIR=\"${OUTPUT[get_source]}\"
+        BRANCH=\"${BRANCH[get_source]}\"
+        REMOTE_URL=\"${URL[get_source]}\"
+        REMOTE=\"${REMOTE[get_source]}\"
+        ${generic_git_cmd}
+"
 }
 
 get_omr() {
-	
         create_sh "
-                if [ ! -f ${J9_JDK_DIR}/omr/.git ]; then
-                        git -C ${J9_JDK_DIR}/omr init
-                        git -C ${J9_JDK_DIR}/omr remote add origin ${git_origin}/omr.git
-                fi
-                git -C ${J9_JDK_DIR}/omr fetch --progress origin master &&
-                git -C ${J9_JDK_DIR}/omr checkout --progress -b master origin/master
-                "
+        DIR=\"${OUTPUT[omr]}\"
+        BRANCH=\"${BRANCH[omr]}\"
+        REMOTE_URL=\"${URL[omr]}\"
+        REMOTE=\"${REMOTE[omr]}\"
+        ${generic_git_cmd}
+"
 }
 
 get_openj9() {
         
         create_sh "
-                if [ ! -f ${J9_JDK_DIR}/openj9/.git ]; then
-                        git -C ${J9_JDK_DIR}/openj9 init
-                        git -C ${J9_JDK_DIR}/openj9 remote add origin ${git_origin}/openj9.git
-                fi
-                git -C ${J9_JDK_DIR}/openj9 fetch --progress origin master
-                git -C ${J9_JDK_DIR}/openj9 checkout --progress -b master origin/master
-                "
+        DIR=\"${OUTPUT[openj9]}\"
+        BRANCH=\"${BRANCH[openj9]}\"
+        REMOTE_URL=\"${URL[openj9]}\"
+        REMOTE=\"${REMOTE[openj9]}\"
+        ${generic_git_cmd}
+"
 }
 
 get_freemarker() {
 
         create_sh  "
-                if [ ! -f ${OUTPUT[freemarker]} ]; then
-                        curl --output ${OUTPUT[freemarker]} ${URL[freemarker]}
-                fi
-                if [ ! -f ${UTILS}/freemarker.jar ]; then
-                        tar -C ${UTILS} -xzf ${DOWNLOADS}/freemarker.tgz freemarker-2.3.8/lib/freemarker.jar --strip=2
-                fi
-                "
+        URL=\"${URL[freemarker]}\"
+        OUTPUT=\"${OUTPUT[freemarker]}\"
+        ${generic_curl_cmd}
+        if [ ! -f ${UTILS}/freemarker.jar ]; then
+                tar -C ${UTILS} -xzf ${DOWNLOADS}/freemarker.tgz freemarker-2.3.8/lib/freemarker.jar --strip=2
+        fi
+        "
 }
 
 get_bootjdk() {
         create_sh "
-                if [ ! -f ${OUTPUT[bootjdk]} ]; then
-                        curl --output ${OUTPUT[bootjdk]} ${URL[bootjdk]}
-                fi
-                if [ ! -d ${UTILS}/bootjdk${VERSION}_${ARCH} ]; then
-                        tar -xzf ${DOWNLOADS}/bootjdk${VERSION}_${ARCH}.tar.gz -C ${TMP_DIR}
-                        mv ${TMP_DIR}/* ${UTILS}/bootjdk${VERSION}_${ARCH}
-                fi
-                "
+        URL=\"${URL[bootjdk]}\"
+        OUTPUT=\"${OUTPUT[bootjdk]}\"
+        ${generic_curl_cmd}
+        if [ ! -d ${UTILS}/bootjdk${VERSION}_${ARCH} ]; then
+                mkdir ${DOWNLOADS}/scratch
+                tar -xzf ${DOWNLOADS}/bootjdk${VERSION}_${ARCH}.tar.gz -C ${DOWNLOADS}/scratch
+                mv ${DOWNLOADS}/scratch/* ${UTILS}/bootjdk${VERSION}_${ARCH}
+                rm -Rf ${DOWNLOADS}/scratch
+        fi
+        "
 }
 
 get_watchdog() {
         create_sh "
-                if [ ! -f ${OUTPUT[watchdog]} ]; then
-                        curl --output ${OUTPUT[watchdog]} ${URL[watchdog]}
-                fi
-                "
+        URL=\"${URL[watchdog]}\"
+        OUTPUT=\"${OUTPUT[watchdog]}\"
+        ${generic_curl_cmd}
+        "
 }
 
 get_xdocker() {
         create_sh "
-                if [ ! -f ${OUTPUT[xdocker]} ]; then
-                        curl --output ${OUTPUT[xdocker]} ${URL[xdocker]}
-                fi
-                "
+        URL=\"${URL[xdocker]}\"
+        OUTPUT=\"${OUTPUT[xdocker]}\"
+        ${generic_curl_cmd}
+        "
 }
 
 get_dockerfile() {
         create_sh "
-                if [ ! -f ${OUTPUT[dockerfile]} ]; then
-                        curl --output ${OUTPUT[dockerfile]} ${URL[dockerfile]}
-                fi
-                "
+        URL=\"${URL[dockerfile]}\"
+        OUTPUT=\"${OUTPUT[dockerfile]}\"
+        ${generic_curl_cmd}
+        "
+}
+
+run_all() {
+        ( for file in "${SCRIPTS}"/get_*.sh; do echo "${file}"; done ) | xargs -n1 -P4 -I{} /bin/bash -c '{}'
 }
 
 source_env() {
@@ -267,7 +302,7 @@ configure_cmd() {
         exec_or_die "\
                 source ${SOURCE_FLAGS}; \
                 chmod +x ./configure; \
-                bash configure --with-freemarker-jar=${FREEMARKER_PATH} --with-boot-jdk=${JAVA_HOME} ${j9_conf} $$* ;\
+                bash configure --with-freemarker-jar=${FREEMARKER_PATH} --with-boot-jdk=${JAVA_HOME} ${j9_conf} \$* ;\
                 popd; \
                 " 
 }
@@ -309,6 +344,7 @@ source_env
 
 source "${SOURCE_FLAGS}"
 
+# generate base scripts
 get_freemarker
 get_bootjdk
 get_dockerfile
@@ -318,7 +354,10 @@ get_source_jdk
 get_omr
 get_openj9
 
-run_sh # spin it!
+#generate a multithreaded cmd
+run_all
+
+
 
 patch_debug
 
