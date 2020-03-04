@@ -190,6 +190,30 @@ get_bootjdk() {
                 "
 }
 
+get_watchdog() {
+        create_sh "
+                if [ ! -f ${OUTPUT[watchdog]} ]; then
+                        curl --output ${OUTPUT[watchdog]} ${URL[watchdog]}
+                fi
+                "
+}
+
+get_xdocker() {
+        create_sh "
+                if [ ! -f ${OUTPUT[xdocker]} ]; then
+                        curl --output ${OUTPUT[xdocker]} ${URL[xdocker]}
+                fi
+                "
+}
+
+get_dockerfile() {
+        create_sh "
+                if [ ! -f ${OUTPUT[dockerfile]} ]; then
+                        curl --output ${OUTPUT[dockerfile]} ${URL[dockerfile]}
+                fi
+                "
+}
+
 source_env() {
 
 	echo "\
