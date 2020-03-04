@@ -119,8 +119,10 @@ create_sh() {
 
         echo "Making ${script_name}"
         echo "
-        rm ${script_log_filename}*
+        
+        rm -f ${script_log_filename}* || /bin/true
         (
+                set -xe
                 $* 
         ) &> ${script_log} && touch ${script_pass} && exit 0;
         touch ${script_fail} && exit 1;" > "${script_name}"
