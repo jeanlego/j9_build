@@ -56,6 +56,12 @@ SCRIPTS="${UTILS}"/scripts
 OUTPUT[get_source]="${BASE_DIR}/jdk${VERSION}"
 OUTPUT[openj9]="${BASE_DIR}/openj9"
 OUTPUT[omr]="${BASE_DIR}/omr"
+OUTPUT[freemarker]="${DOWNLOADS}/freemarker.tgz"
+OUTPUT[bootjdk]="${DOWNLOADS}/bootjdk${VERSION}_${ARCH}.tar.gz"
+OUTPUT[dockerfile]="${BUILDER}/Dockerfile"
+OUTPUT[watchdog]="${UTILS}/casa.watchdog.sh"
+OUTPUT[xdocker]="${UTILS}/xdocker.sh"
+
 SOURCE_FLAGS=j9.env
 
 mkdir -p "${BASE_DIR}"
@@ -68,23 +74,11 @@ rm -Rf "${LOGS}" && mkdir -p "${LOGS}"
 mkdir -p "${OUTPUT[get_source]}"
 mkdir -p "${OUTPUT[openj9]}"
 mkdir -p "${OUTPUT[omr]}"
+
 [ ! -L "${OUTPUT[get_source]}/omr" ] && ln -s -t "${OUTPUT[get_source]}" "${OUTPUT[omr]}"
 [ ! -L "${OUTPUT[get_source]}/openj9" ] && ln -s -t "${OUTPUT[get_source]}" "${OUTPUT[openj9]}"
 
-REMOTE[freemarker]="https://sourceforge.net/projects/freemarker/files/freemarker/2.3.8/freemarker-2.3.8.tar.gz/download"
-OUTPUT[freemarker]="${DOWNLOADS}/freemarker.tgz"
 
-REMOTE[bootjdk]="https://api.adoptopenjdk.net/v2/binary/nightly/openjdk${VERSION}?openjdk_impl=hotspot&os=linux&arch=${ARCH}&release=latest&type=jdk"
-OUTPUT[bootjdk]="${DOWNLOADS}/bootjdk${VERSION}_${ARCH}.tar.gz"
-
-REMOTE[dockerfile]="https://raw.githubusercontent.com/CAS-Atlantic/openj9/52fa8dc53987972998512f45b91fe4cca268b652/buildenv/docker/jdk11/x86_64/ubuntu18/Dockerfile"
-OUTPUT[dockerfile]="${BUILDER}/Dockerfile"
-
-REMOTE[watchdog]="https://raw.githubusercontent.com/CAS-Atlantic/openj9/aarch64_casa_watchdog_script/casa.watchdog.sh"
-OUTPUT[watchdog]="${UTILS}/casa.watchdog.sh"
-
-REMOTE[xdocker]="https://raw.githubusercontent.com/CAS-Atlantic/xdocker/master/xdocker.sh"
-OUTPUT[xdocker]="${UTILS}/xdocker.sh"
 
 print_script_env() {
         echo  "\
@@ -328,25 +322,14 @@ run_all() {
                 sleep 1 
                 while true;
                 do
-
-                        FILES_TO_LOG=( "${LOGS}/*.progress" )
-                        if [ "_1" == "_${#FILES_TO_LOG[@]}" ]
-                        then
-                                if [ -f "${FILES_TO_LOG[0]}" ]
+                        for files in "${LOGS}/"*.progress;
+                        do
+                                if [ -f "${files}" ]
                                 then
-                                        echo -e "\n\n========== LOG ${FILES_TO_LOG[0]} ============ \n\n"
-                                        tail -f "${FILES_TO_LOG[0]}"
+                                        echo -e "\n\n========== LOG ${files} ============ \n\n"
+                                        timeout 10 tail -f "${files}"
                                 fi
-                        else
-                                for files in "${FILES_TO_LOG[@]}";
-                                do
-                                        if [ -f "${files}" ]
-                                        then
-                                                echo -e "\n\n========== LOG ${files} ============ \n\n"
-                                                timeout 10 tail -f "${files}"
-                                        fi
-                                done
-                        fi
+                        done
                 done 
         )&
 
