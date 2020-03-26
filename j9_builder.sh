@@ -27,9 +27,9 @@ declare -A COMMIT
 declare -A BRANCH
 declare -A REMOTE
 
-declare -A CONFIGURE_ARGS
-declare -A BUILD_ARGS
-declare -A CLEAN_ARGS
+CONFIGURE_ARGS=()
+BUILD_ARGS=()
+CLEAN_ARGS=()
 
 j9_conf=''
 
@@ -333,7 +333,7 @@ source \"${SOURCE_FLAGS}\"
                 configure)
                         if [ \"\${BUILD_TYPE}\" == \"debug\" ];
                         then
-                                configure \\
+                                ./configure \\
                                         --with-freemarker-jar=${FREEMARKER_PATH} \\
                                         --with-boot-jdk=${JAVA_HOME} \\
                                         --with-debug-level=slowdebug \\
@@ -341,7 +341,7 @@ source \"${SOURCE_FLAGS}\"
                                         --with-extra-cxxflags='-O0 -g3' \\ 
                                         ${CONFIGURE_ARGS[*]} \"\${@:2}\"
                         else
-                                configure \\
+                                ./configure \\
                                         --with-freemarker-jar=${FREEMARKER_PATH} \\
                                         --with-boot-jdk=${JAVA_HOME} \\
                                         ${CONFIGURE_ARGS[*]} \"\${@:2}\"
