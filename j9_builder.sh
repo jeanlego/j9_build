@@ -289,10 +289,6 @@ get_dockerfile() {
         "
 }
 
-declare -A CONFIGURE_ARGS
-declare -A BUILD_ARGS
-declare -A CLEAN_ARGS
-
 do_j9() {
         echo "\
 #!/bin/bash
