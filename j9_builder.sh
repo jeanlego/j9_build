@@ -330,8 +330,8 @@ source \"${SOURCE_FLAGS}\"
                 configure)
                         CMD=(   ./configure 
                                 ${CONFIGURE_ARGS[*]}
-                                --with-freemarker-jar=${FREEMARKER_PATH}
-                                --with-boot-jdk=${JAVA_HOME}
+                                --with-freemarker-jar=\${FREEMARKER_PATH}
+                                --with-boot-jdk=\${JAVA_HOME}
                         )
 
                         if [ \"\${BUILD_TYPE}\" == \"debug\" ];
@@ -362,7 +362,7 @@ source \"${SOURCE_FLAGS}\"
         esac
         echo \"Running \"\${CMD[*]}\" \${*:2}\"
         \"\${CMD[@]}\" \"\${@:2}\"
-        
+
 ) 2>&1 | tee \"_\$1.log\"
 popd || exit 255
 " > "${OUTPUT[get_source]}/${FUNCNAME[0]}.sh"
