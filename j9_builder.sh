@@ -369,23 +369,6 @@ export PATH=${BOOTJDK_PATH}/bin:${PATH}
 export CONFIGURE_ARGS=\"${CONFIGURE_ARGS[*]}\"
 export CLEAN_ARGS=\"${CLEAN_ARGS[*]}\"
 export BUILD_ARGS=\"${BUILD_ARGS[*]}\"
-
-# unset some flags
-unset OMR_OPTIMIZE
-unset OPTIMIZATION_FLAGS
-unset UMA_DO_NOT_OPTIMIZE_CCODE
-unset UMA_OPTIMIZATION_CFLAGS
-unset UMA_OPTIMIZATION_CXXFLAGS
-unset UMA_DO_NOT_OPTIMIZE_CCODE
-unset VMDEBUG
-unset VMLINK
-unset enable_optimized
-unset enable_optimize
-unset j9_conf
-export BUILD_CONFIG=release
-export CONF=release
-unset CFLAGS
-unset CXXFLAGS
 " > "${OUTPUT[get_source]}/${SOURCE_FLAGS}"
 
         case "${BUILD_TYPE}" in
@@ -410,21 +393,22 @@ export CXXFLAGS='-O0 -g3'
                         ;;
                 *)
 	                echo "\
-unset OMR_OPTIMIZE
-unset OPTIMIZATION_FLAGS
-unset UMA_DO_NOT_OPTIMIZE_CCODE
-unset UMA_OPTIMIZATION_CFLAGS
-unset UMA_OPTIMIZATION_CXXFLAGS
-unset UMA_DO_NOT_OPTIMIZE_CCODE
-unset VMDEBUG
-unset VMLINK
-unset enable_optimized
-unset enable_optimize
+# we want to retain the frame pointers at the very least
+export OMR_OPTIMIZE=1
+export OPTIMIZATION_FLAGS='-fno-omit-frame-pointer'
+export UMA_DO_NOT_OPTIMIZE_CCODE=0
+export UMA_OPTIMIZATION_CFLAGS='-fno-omit-frame-pointer'
+export UMA_OPTIMIZATION_CXXFLAGS='-fno-omit-frame-pointer'
+export UMA_DO_NOT_OPTIMIZE_CCODE=0
+export VMDEBUG='-fno-omit-frame-pointer'
+export VMLINK='-fno-omit-frame-pointer'
+export enable_optimized=yes
+export enable_optimize=yes
 unset j9_conf
 export BUILD_CONFIG=release
 export CONF=release
-unset CFLAGS
-unset CXXFLAGS
+export CFLAGS='-fno-omit-frame-pointer'
+export CXXFLAGS='-fno-omit-frame-pointer'
 " >> "${OUTPUT[get_source]}/${SOURCE_FLAGS}"
                 ;;
         esac
