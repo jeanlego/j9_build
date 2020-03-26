@@ -382,15 +382,15 @@ unset VMLINK
 unset enable_optimized
 unset enable_optimize
 unset j9_conf
-unset BUILD_CONFIG
-unset CONF
+export BUILD_CONFIG=release
+export CONF=release
 unset CFLAGS
 unset CXXFLAGS
 " > "${OUTPUT[get_source]}/${SOURCE_FLAGS}"
 
-if [ "${BUILD_TYPE}" == "debug" ];
-then
-	echo "\
+        case "${BUILD_TYPE}" in
+                [dD]ebug)
+	                echo "\
 export OMR_OPTIMIZE=0
 export OPTIMIZATION_FLAGS='-fno-inline -fstack-protector-all'
 export UMA_DO_NOT_OPTIMIZE_CCODE=1
@@ -407,6 +407,27 @@ export CONF=slowdebug
 export CFLAGS='-O0 -g3'
 export CXXFLAGS='-O0 -g3'
 " >> "${OUTPUT[get_source]}/${SOURCE_FLAGS}"
+                        ;;
+                *)
+	                echo "\
+unset OMR_OPTIMIZE
+unset OPTIMIZATION_FLAGS
+unset UMA_DO_NOT_OPTIMIZE_CCODE
+unset UMA_OPTIMIZATION_CFLAGS
+unset UMA_OPTIMIZATION_CXXFLAGS
+unset UMA_DO_NOT_OPTIMIZE_CCODE
+unset VMDEBUG
+unset VMLINK
+unset enable_optimized
+unset enable_optimize
+unset j9_conf
+export BUILD_CONFIG=release
+export CONF=release
+unset CFLAGS
+unset CXXFLAGS
+" >> "${OUTPUT[get_source]}/${SOURCE_FLAGS}"
+                ;;
+        esac
 fi
 
 }
@@ -420,12 +441,14 @@ patch_debug() {
 
         if [ -f "${openj9_mk}" ];
         then
-                if [ "${BUILD_TYPE}" == "debug" ];
-                then
+                case "${BUILD_TYPE}" in
+                [dD]ebug)
                         sed "/--strip-debug/d" "${openj9_mk}" > "${orig_openj9_mk}"
-                else
+                        ;;
+                *)
                         cp "${openj9_mk}" "${orig_openj9_mk}"
-                fi
+                        ;;
+                esac
         fi
         
         orig_omr_mk="${OUTPUT[omr]}/omrmakefiles/rules.linux.mk"
@@ -436,12 +459,14 @@ patch_debug() {
 
         if [ -f "${omr_mk}" ];
         then
-                if [ "${BUILD_TYPE}" == "debug" ];
-                then
+                case "${BUILD_TYPE}" in
+                [dD]ebug)
                         sed "/--strip-debug/d" "${omr_mk}" > "${orig_omr_mk}"
-                else
+                        ;;
+                *)
                         cp "${omr_mk}" "${orig_omr_mk}"
-                fi
+                        ;;
+                esac
         fi
 }
 
