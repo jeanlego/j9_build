@@ -378,22 +378,37 @@ unset CONF
 }
 
 patch_debug() {
-        openj9_mk=${UTILS}/j9.mk
-        omr_mk=${UTILS}/omr.mk
+        orig_openj9_mk="${OUTPUT[openj9]}/runtime/makelib/targets.mk.linux.inc.ftl"
+        openj9_mk="${UTILS}/j9.mk"
+        # make the original copy
+        [ -f "${orig_openj9_mk}" ] && [ ! -f "${openj9_mk}" ] && \
+                cp "${orig_openj9_mk}" "${openj9_mk}"
 
-        [ -f "${OUTPUT[omr]}/omrmakefiles/rules.linux.mk" ] && \
-        [ ! -f "${omr_mk}" ] && \
-                cp "${OUTPUT[omr]}/omrmakefiles/rules.linux.mk" "${omr_mk}"
-
-        [ -f "${OUTPUT[openj9]}/runtime/makelib/targets.mk.linux.inc.ftl" ] && \
-        [ ! -f "${openj9_mk}" ] && \
-                cp "${OUTPUT[openj9]}/runtime/makelib/targets.mk.linux.inc.ftl" "${openj9_mk}"
-
-        [ ! -f "${openj9_mk}" ] && \
-                sed "/--strip-debug/d" "${openj9_mk}" > "${OUTPUT[openj9]}/runtime/makelib/targets.mk.linux.inc.ftl"
+        if [ -f "${openj9_mk}" ];
+        then
+                if [ "${BUILD_TYPE}" == "debug" ];
+                then
+                        sed "/--strip-debug/d" "${openj9_mk}" > "${orig_openj9_mk}"
+                else
+                        cp "${openj9_mk}" "${orig_openj9_mk}"
+                fi
+        fi
         
-        [ ! -f "${omr_mk}" ] && \
-                sed "/--strip-debug/d" "${omr_mk}" > "${OUTPUT[omr]}/omrmakefiles/rules.linux.mk"
+        orig_omr_mk="${OUTPUT[omr]}/omrmakefiles/rules.linux.mk"
+        omr_mk="${UTILS}/omr.mk"
+        # make the original copy
+        [ -f "${orig_omr_mk}" ] && [ ! -f "${omr_mk}" ] && \
+                cp "${orig_omr_mk}" "${omr_mk}"
+
+        if [ -f "${omr_mk}" ];
+        then
+                if [ "${BUILD_TYPE}" == "debug" ];
+                then
+                        sed "/--strip-debug/d" "${omr_mk}" > "${orig_omr_mk}"
+                else
+                        cp "${omr_mk}" "${orig_omr_mk}"
+                fi
+        fi
 }
 
 ######################
