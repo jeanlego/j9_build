@@ -41,15 +41,6 @@ else
         echo "failed to source build.conf"
 fi
 
-# check valid env
-case "${BUILD_TYPE}" in                
-release|debug) ;;*)     die -1 "BUILD_TYPE=\"${BUILD_TYPE}\"  env variable can only be \"release\" or \"debug\"";;
-esac
-
-case "${VERSION}" in
-8|9|10|11|12);;*)       die -1 "VERSION=\"${VERSION}\" env variable can only be \"8, 9, 10, 11 or 12\"";;
-esac
-
 THIS_DIR="${PWD}"
 BASE_DIR="${THIS_DIR}"/j9Builds
 DOWNLOADS="${BASE_DIR}"/downloads
@@ -308,12 +299,58 @@ do_j9() {
 pushd ${OUTPUT[get_source]} || exit 255
 source \"${SOURCE_FLAGS}\"
 (
+        unset OMR_OPTIMIZE
+        unset OPTIMIZATION_FLAGS
+        unset UMA_DO_NOT_OPTIMIZE_CCODE
+        unset UMA_OPTIMIZATION_CFLAGS
+        unset UMA_OPTIMIZATION_CXXFLAGS
+        unset UMA_DO_NOT_OPTIMIZE_CCODE
+        unset VMDEBUG
+        unset VMLINK
+        unset enable_optimized
+        unset enable_optimize
+        unset j9_conf
+        unset BUILD_CONFIG
+        unset CONF
+        if [ \"\${BUILD_TYPE}\" == \"debug\" ];
+        then
+                export OMR_OPTIMIZE=0
+                export OPTIMIZATION_FLAGS='-fno-inline -fstack-protector-all'
+                export UMA_DO_NOT_OPTIMIZE_CCODE=1
+                export UMA_OPTIMIZATION_CFLAGS='-fno-inline -fstack-protector-all'
+                export UMA_OPTIMIZATION_CXXFLAGS='-fno-inline -fstack-protector-all'
+                export UMA_DO_NOT_OPTIMIZE_CCODE='1'
+                export VMDEBUG='-g3 -fno-inline -fstack-protector-all -O0'
+                export VMLINK='-g -O0'
+                export enable_optimized=no
+                export enable_optimize=no
+                export j9_conf='--with-debug-level=slowdebug'
+                export BUILD_CONFIG=slowdebug
+                export CONF=slowdebug
+        fi
+
         case \$1 in
                 configure)
-                        bash configure --with-freemarker-jar=${UTILS}/freemarker.jar --with-boot-jdk=${UTILS}/bootjdk${VERSION}_${ARCH} \${j9_conf} ${CONFIGURE_ARGS[*]} \"\${@:2}\"
+                        bash configure \\
+                                --with-freemarker-jar=${UTILS}/freemarker.jar \\
+                                --with-boot-jdk=${UTILS}/bootjdk${VERSION}_${ARCH} \\
+                                \${j9_conf} \\
+                                ${CONFIGURE_ARGS[*]} \\
+                                \"\${@:2}\"
                         ;;
                 build)
-                        ${UTILS}/casa.watchdog.sh make ${BUILD_ARGS[*]} \"\${@:2}\" 
+                        if [ \"\${BUILD_TYPE}\" == \"debug\" ];
+                        then
+                                ${UTILS}/casa.watchdog.sh make \\
+                                        --with-extra-cflags='-O0 -g3' \\
+                                        --with-extra-cxxflags='-O0 -g3' \\
+                                        ${BUILD_ARGS[*]} \\
+                                        \"\${@:2}\" 
+                        else
+                                ${UTILS}/casa.watchdog.sh make \\
+                                        ${BUILD_ARGS[*]} \\
+                                        \"\${@:2}\" 
+                        fi
                         ;;
                 clean)
                         make clean ${CLEAN_ARGS[*]} \"\${@:2}\"
@@ -351,7 +388,6 @@ run_all() {
 }
 
 source_env() {
-
 	echo "\
 export BUILD_TYPE=${BUILD_TYPE}
 export VERSION=${VERSION}
@@ -359,31 +395,7 @@ export ARCH=${ARCH}
 export FREEMARKER_PATH=${UTILS}/freemarker.jar
 export JAVA_HOME=${UTILS}/bootjdk${VERSION}_${ARCH}
 export PATH=${BOOTJDK_PATH}/bin:${PATH}
-export OMR_OPTIMIZE=0
-export OPTIMIZATION_FLAGS='-fno-inline -fstack-protector-all'
-export UMA_DO_NOT_OPTIMIZE_CCODE=1
-export UMA_OPTIMIZATION_CFLAGS='-fno-inline -fstack-protector-all'
-export UMA_OPTIMIZATION_CXXFLAGS='-fno-inline -fstack-protector-all'
-export UMA_DO_NOT_OPTIMIZE_CCODE='1'
-export VMDEBUG='-g3 -fno-inline -fstack-protector-all -O0'
-export VMLINK='-g -O0'
-export enable_optimized=no
-export enable_optimize=no
-export CXXFLAGS='-O0 -g3'
-export CFLAGS='-O0 -g3'
-export j9_conf='--with-debug-level=slowdebug'
-export BUILD_CONFIG=slowdebug
-export CONF=slowdebug
 " > "${OUTPUT[get_source]}/${SOURCE_FLAGS}"
-
-        if [ "${BUILD_TYPE}" != "debug" ]
-        then 
-	        echo "\
-unset j9_conf
-unset BUILD_CONFIG
-unset CONF
-" >> "${OUTPUT[get_source]}/${SOURCE_FLAGS}"
-        fi
 }
 
 patch_debug() {
@@ -431,8 +443,18 @@ case "$(uname -s)" in
         ;;
 esac
 
+# check valid env
+case "${BUILD_TYPE}" in                
+[Rr]elease|[Dd]ebug) ;;*)     die -1 "BUILD_TYPE=\"${BUILD_TYPE}\"  env variable can only be \"release\" or \"debug\"";;
+esac
+
+case "${VERSION}" in
+8|9|10|11|12);;*)       die -1 "VERSION=\"${VERSION}\" env variable can only be \"8, 9, 10, 11 or 12\"";;
+esac
+
+# check cmd
 case $1 in
-        configure|build|clean);;
+        build|configure|clean);;
         *)              die -1 "Invalid command $1";;
 esac
 
