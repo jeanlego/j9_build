@@ -27,6 +27,10 @@ declare -A COMMIT
 declare -A BRANCH
 declare -A REMOTE
 
+declare -A CONFIGURE_ARGS
+declare -A BUILD_ARGS
+declare -A CLEAN_ARGS
+
 j9_conf=''
 
 source "./build.conf"
@@ -97,9 +101,9 @@ usage() {
 "
 $0 
 Usage:
-    build     [<makefile targets>...]          build using makefile
-    configure [<extra-configure-args> ... ]    trigger a configure
-    clean                                      clean the build
+    build     [args...]    build using makefile
+    configure [args...]    trigger a configure
+    clean     [args...]    clean the build
 "
 exit "$1"
 }
@@ -294,6 +298,10 @@ get_dockerfile() {
         "
 }
 
+declare -A CONFIGURE_ARGS
+declare -A BUILD_ARGS
+declare -A CLEAN_ARGS
+
 do_j9() {
         echo "\
 #!/bin/bash
@@ -302,13 +310,13 @@ source \"${SOURCE_FLAGS}\"
 (
         case \$1 in
                 configure)
-                        bash configure --with-freemarker-jar=${UTILS}/freemarker.jar --with-boot-jdk=${UTILS}/bootjdk${VERSION}_${ARCH} \${j9_conf} \"\${@:2}\"
+                        bash configure --with-freemarker-jar=${UTILS}/freemarker.jar --with-boot-jdk=${UTILS}/bootjdk${VERSION}_${ARCH} \${j9_conf} ${CONFIGURE_ARGS[*]} \"\${@:2}\"
                         ;;
                 build)
-                        ${UTILS}/casa.watchdog.sh make \"\${@:2}\"
+                        ${UTILS}/casa.watchdog.sh make ${BUILD_ARGS[*]} \"\${@:2}\" 
                         ;;
                 clean)
-                        make clean
+                        make clean ${CLEAN_ARGS[*]} \"\${@:2}\"
                         ;;
                 *)
                         echo 'not a valid command'
