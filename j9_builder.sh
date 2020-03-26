@@ -295,63 +295,29 @@ do_j9() {
 pushd ${OUTPUT[get_source]} || exit 255
 source \"${SOURCE_FLAGS}\"
 (
-        unset OMR_OPTIMIZE
-        unset OPTIMIZATION_FLAGS
-        unset UMA_DO_NOT_OPTIMIZE_CCODE
-        unset UMA_OPTIMIZATION_CFLAGS
-        unset UMA_OPTIMIZATION_CXXFLAGS
-        unset UMA_DO_NOT_OPTIMIZE_CCODE
-        unset VMDEBUG
-        unset VMLINK
-        unset enable_optimized
-        unset enable_optimize
-        unset j9_conf
-        unset BUILD_CONFIG
-        unset CONF
-        if [ \"\${BUILD_TYPE}\" == \"debug\" ];
-        then
-                export OMR_OPTIMIZE=0
-                export OPTIMIZATION_FLAGS='-fno-inline -fstack-protector-all'
-                export UMA_DO_NOT_OPTIMIZE_CCODE=1
-                export UMA_OPTIMIZATION_CFLAGS='-fno-inline -fstack-protector-all'
-                export UMA_OPTIMIZATION_CXXFLAGS='-fno-inline -fstack-protector-all'
-                export UMA_DO_NOT_OPTIMIZE_CCODE='1'
-                export VMDEBUG='-g3 -fno-inline -fstack-protector-all -O0'
-                export VMLINK='-g -O0'
-                export enable_optimized=no
-                export enable_optimize=no
-                export j9_conf='--with-debug-level=slowdebug'
-                export BUILD_CONFIG=slowdebug
-                export CONF=slowdebug
-        fi
-
         CMD=\"\"
         case \$1 in
                 configure)
                         CMD=(   ./configure 
-                                ${CONFIGURE_ARGS[*]}
-                                --with-freemarker-jar=\${FREEMARKER_PATH}
-                                --with-boot-jdk=\${JAVA_HOME}
+                                --with-freemarker-jar=\"\${FREEMARKER_PATH}\"
+                                --with-boot-jdk=\"\${JAVA_HOME}\"
+                                --with-extra-cflags=\"\${CFLAGS}\"
+                                --with-extra-cxxflags=\"\${CXXFLAGS}\"
+                                \${CONFIGURE_ARGS}
+                                \"\${@:2}\" 
                         )
-
-                        if [ \"\${BUILD_TYPE}\" == \"debug\" ];
-                        then
-                                CMD+=(  --with-extra-cflags='-O0 -g3'
-                                        --with-extra-cxxflags='-O0 -g3'
-                                )
-                        fi
                         ;;
                 build)
                         CMD=(   ${UTILS}/casa.watchdog.sh 
                                 make 
-                                ${BUILD_ARGS[*]}
+                                \${BUILD_ARGS}
                                 \"\${@:2}\" 
                         )
                         ;;
                 clean)
                         CMD=(   make 
                                 clean 
-                                ${CLEAN_ARGS[*]}
+                                \${CLEAN_ARGS}
                                 \"\${@:2}\"
                         )
                         ;;
@@ -400,7 +366,49 @@ export ARCH=${ARCH}
 export FREEMARKER_PATH=${UTILS}/freemarker.jar
 export JAVA_HOME=${UTILS}/bootjdk${VERSION}_${ARCH}
 export PATH=${BOOTJDK_PATH}/bin:${PATH}
+export CONFIGURE_ARGS=\"${CONFIGURE_ARGS[*]}\"
+export CLEAN_ARGS=\"${CLEAN_ARGS[*]}\"
+export BUILD_ARGS=\"${BUILD_ARGS[*]}\"
+
+# unset some flags
+unset OMR_OPTIMIZE
+unset OPTIMIZATION_FLAGS
+unset UMA_DO_NOT_OPTIMIZE_CCODE
+unset UMA_OPTIMIZATION_CFLAGS
+unset UMA_OPTIMIZATION_CXXFLAGS
+unset UMA_DO_NOT_OPTIMIZE_CCODE
+unset VMDEBUG
+unset VMLINK
+unset enable_optimized
+unset enable_optimize
+unset j9_conf
+unset BUILD_CONFIG
+unset CONF
+unset CFLAGS
+unset CXXFLAGS
 " > "${OUTPUT[get_source]}/${SOURCE_FLAGS}"
+
+if [ "${BUILD_TYPE}" == "debug" ];
+then
+	echo "\
+export OMR_OPTIMIZE=0
+export OPTIMIZATION_FLAGS='-fno-inline -fstack-protector-all'
+export UMA_DO_NOT_OPTIMIZE_CCODE=1
+export UMA_OPTIMIZATION_CFLAGS='-fno-inline -fstack-protector-all'
+export UMA_OPTIMIZATION_CXXFLAGS='-fno-inline -fstack-protector-all'
+export UMA_DO_NOT_OPTIMIZE_CCODE='1'
+export VMDEBUG='-g3 -fno-inline -fstack-protector-all -O0'
+export VMLINK='-g -O0'
+export enable_optimized=no
+export enable_optimize=no
+export j9_conf='--with-debug-level=slowdebug'
+export BUILD_CONFIG=slowdebug
+export CONF=slowdebug
+export CFLAGS='-O0 -g3'
+export CXXFLAGS='-O0 -g3'
+" >> "${OUTPUT[get_source]}/${SOURCE_FLAGS}"
+fi
+
 }
 
 patch_debug() {
