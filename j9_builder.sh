@@ -460,10 +460,11 @@ do_j9
 fail_count=0
 for failures in "${LOGS}/"*.failure;
 do
-        "Failed: ${failures}"
         fail_count=$(( fail_count + 1 ))
+        echo "==== FAILED ${failures} ======="
+        cat "${failures}"
 done
-EXIT_CODE=${failures}
+EXIT_CODE=${fail_count}
 
 if [[ -z "${EXIT_CODE}" ]]; 
 then
