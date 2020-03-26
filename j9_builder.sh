@@ -329,23 +329,23 @@ source \"${SOURCE_FLAGS}\"
                 export CONF=slowdebug
         fi
 
-        CONFIG_ARGS=( 
-                \"--with-freemarker-jar=${UTILS}/freemarker.jar \"
-                \"--with-boot-jdk=${UTILS}/bootjdk${VERSION}_${ARCH} \"
-                \"\${j9_conf}\"
-                \"${CONFIGURE_ARGS[*]}\"
-        )
-
-        if [ \"\${BUILD_TYPE}\" == \"debug\" ];
-                CONFIG_ARGS+=(
-                        \"--with-extra-cflags='-O0 -g3' \"
-                        \"--with-extra-cxxflags='-O0 -g3' \"      
-                )
-        fi
-
         case \$1 in
                 configure)
-                        configure \"\${CONFIG_ARGS[@]}\" \"\${@:2}\"
+                        if [ \"\${BUILD_TYPE}\" == \"debug\" ];
+                        then
+                                configure \\
+                                        --with-freemarker-jar=${FREEMARKER_PATH} \\
+                                        --with-boot-jdk=${JAVA_HOME} \\
+                                        --with-debug-level=slowdebug \\
+                                        --with-extra-cflags='-O0 -g3' \\
+                                        --with-extra-cxxflags='-O0 -g3' \\ 
+                                        ${CONFIGURE_ARGS[*]} \"\${@:2}\"
+                        else
+                                configure \\
+                                        --with-freemarker-jar=${FREEMARKER_PATH} \\
+                                        --with-boot-jdk=${JAVA_HOME} \\
+                                        ${CONFIGURE_ARGS[*]} \"\${@:2}\"
+                        fi
                         ;;
                 build)
                         ${UTILS}/casa.watchdog.sh make ${BUILD_ARGS[*]} \"\${@:2}\" 
