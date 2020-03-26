@@ -325,33 +325,44 @@ source \"${SOURCE_FLAGS}\"
                 export CONF=slowdebug
         fi
 
+        CMD=\"\"
         case \$1 in
                 configure)
+                        CMD=(   ./configure 
+                                ${CONFIGURE_ARGS[*]}
+                                --with-freemarker-jar=${FREEMARKER_PATH}
+                                --with-boot-jdk=${JAVA_HOME}
+                        )
+
                         if [ \"\${BUILD_TYPE}\" == \"debug\" ];
                         then
-                                ./configure \\
-                                        --with-freemarker-jar=${FREEMARKER_PATH} \\
-                                        --with-boot-jdk=${JAVA_HOME} \\
-                                        --with-debug-level=slowdebug \\
-                                        --with-extra-cflags='-O0 -g3' \\
-                                        --with-extra-cxxflags='-O0 -g3' \\ 
-                                        ${CONFIGURE_ARGS[*]} \"\${@:2}\"
-                        else
-                                ./configure \\
-                                        --with-freemarker-jar=${FREEMARKER_PATH} \\
-                                        --with-boot-jdk=${JAVA_HOME} \\
-                                        ${CONFIGURE_ARGS[*]} \"\${@:2}\"
+                                CMD+=(  --with-extra-cflags='-O0 -g3'
+                                        --with-extra-cxxflags='-O0 -g3'
+                                )
                         fi
                         ;;
                 build)
-                        ${UTILS}/casa.watchdog.sh make ${BUILD_ARGS[*]} \"\${@:2}\" 
+                        CMD=(   ${UTILS}/casa.watchdog.sh 
+                                make 
+                                ${BUILD_ARGS[*]}
+                                \"\${@:2}\" 
+                        )
                         ;;
                 clean)
-                        make clean ${CLEAN_ARGS[*]} \"\${@:2}\"
+                        CMD=(   make 
+                                clean 
+                                ${CLEAN_ARGS[*]}
+                                \"\${@:2}\"
+                        )
                         ;;
                 *)
                         echo 'not a valid command'
+                        exit 255
+                        ;;
         esac
+        echo \"Running \"\${CMD[*]}\" \${*:2}\"
+        \"\${CMD[@]}\" \"\${@:2}\"
+        
 ) 2>&1 | tee \"_\$1.log\"
 popd || exit 255
 " > "${OUTPUT[get_source]}/${FUNCNAME[0]}.sh"
