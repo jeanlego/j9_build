@@ -470,7 +470,7 @@ do
 done
 EXIT_CODE=${fail_count}
 
-if [[ -z "${EXIT_CODE}" ]]; 
+if "${EXIT_CODE}"
 then
         echo " --- Starting docker chroot environment"
         echo " do_configure.sh and do_build.sh will allow you to build"
