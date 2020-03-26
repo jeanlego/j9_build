@@ -457,12 +457,16 @@ patch_debug
 echo " --- generate the build scripts"
 do_j9
 
+FAILURES=( "${LOGS}/"*.failure )
 fail_count=0
-for failures in "${LOGS}/"*.failure;
+for failures in "${FAILURES[@]}";
 do
-        fail_count=$(( fail_count + 1 ))
-        echo "==== FAILED ${failures} ======="
-        cat "${failures}"
+        if [ -f "${failures}" ];
+        then
+                fail_count=$(( fail_count + 1 ))
+                echo "==== FAILED ${failures} ======="
+                cat "${failures}"
+        fi
 done
 EXIT_CODE=${fail_count}
 
