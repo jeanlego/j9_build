@@ -99,6 +99,7 @@ $0
 Usage:
     build     [<makefile targets>...]          build using makefile
     configure [<extra-configure-args> ... ]    trigger a configure
+    clean                                      clean the build
 "
 exit "$1"
 }
@@ -423,7 +424,7 @@ case "$(uname -s)" in
 esac
 
 case $1 in
-        configure|build);;
+        configure|build|clean);;
         *)              die -1 "Invalid command $1";;
 esac
 
