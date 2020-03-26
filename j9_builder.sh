@@ -23,6 +23,7 @@ declare -A OMR
 declare -A GET_SOURCE
 declare -A OUTPUT
 
+declare -A COMMIT
 declare -A BRANCH
 declare -A REMOTE
 
@@ -98,11 +99,6 @@ $0
 Usage:
     build     [<makefile targets>...]          build using makefile
     configure [<extra-configure-args> ... ]    trigger a configure
-
-Variables:
-    VERSION             8 | 9 | 10 | 11 | 12
-    BUILD_TYPE          debug | release
-    ARCH                x86_64 | x86 | aarch64 ... <see openj9 hotspot release>
 "
 exit "$1"
 }
@@ -186,7 +182,6 @@ generic_git_cmd='
         git -C "${DIR}" remote | xargs -n 1 -I{} git -C "${DIR}" remote remove {}
 
         # update the remotes
-
         for ((i=0; i<${#REMOTE_URLS[@]}; i++)); do
                 git -C "${DIR}" remote add "${REMOTE_NAMES[$i]}" "${REMOTE_URLS[$i]}"
         done
@@ -194,6 +189,9 @@ generic_git_cmd='
         git -C "${DIR}" fetch --progress "${REMOTE}" "${BRANCH}"
         if [ "_$(git -C "${DIR}" rev-parse --abbrev-ref HEAD)" != "_${BRANCH}" ]; then
                 git -C "${DIR}" checkout --progress -b "${BRANCH}" "${REMOTE}/${BRANCH}"
+        fi
+        if [[ ! -z "${COMMIT}" ]]; then
+                git -C "${DIR}" reset --hard "${COMMIT}"
         fi
 '
 
@@ -208,6 +206,7 @@ get_source_jdk() {
         REMOTE_NAMES=( ${!GET_SOURCE[@]} )
         REMOTE_URLS=( ${GET_SOURCE[@]} )
         DIR=\"${OUTPUT[get_source]}\"
+        COMMIT=\"${COMMIT[get_source]}\"
         BRANCH=\"${BRANCH[get_source]}\"
         REMOTE=\"${REMOTE[get_source]}\"
         ${generic_git_cmd}
@@ -220,6 +219,7 @@ get_omr() {
         REMOTE_NAMES=( ${!OMR[@]} )
         REMOTE_URLS=( ${OMR[@]} )
         DIR=\"${OUTPUT[omr]}\"
+        COMMIT=\"${COMMIT[omr]}\"
         BRANCH=\"${BRANCH[omr]}\"
         REMOTE=\"${REMOTE[omr]}\"
         ${generic_git_cmd}
@@ -232,6 +232,7 @@ get_openj9() {
         REMOTE_NAMES=( ${!OPENJ9[@]} )
         REMOTE_URLS=( ${OPENJ9[@]} )
         DIR=\"${OUTPUT[openj9]}\"
+        COMMIT=\"${COMMIT[openj9]}\"
         BRANCH=\"${BRANCH[openj9]}\"
         REMOTE=\"${REMOTE[openj9]}\"
         ${generic_git_cmd}
