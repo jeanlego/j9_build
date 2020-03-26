@@ -457,14 +457,21 @@ patch_debug
 echo " --- generate the build scripts"
 do_j9
 
-echo " --- Starting docker chroot environment"
-if [ "_0" == "_$( find "${LOGS}" -name "*.failure" | wc -l )" ]
+fail_count=0
+for failures in "${LOGS}/"*.failure;
+do
+        "Failed: ${failures}"
+        fail_count=$(( fail_count + 1 ))
+done
+EXIT_CODE=${failures}
+
+if [[ -z "${EXIT_CODE}" ]]; 
 then
+        echo " --- Starting docker chroot environment"
         echo " do_configure.sh and do_build.sh will allow you to build"
         "${UTILS}"/xdocker.sh -f "${BUILDER}"/Dockerfile "${ARCH}" "${THIS_DIR}" "${OUTPUT[get_source]}/do_j9.sh" "$@"
+        EXIT_CODE=$?
 fi
 
-EXIT_CODE=$?
 echo " Done, exit with code ${EXIT_CODE}"
-
 exit ${EXIT_CODE}
